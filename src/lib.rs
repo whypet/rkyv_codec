@@ -40,7 +40,7 @@
 pub mod length_codec;
 pub use length_codec::VarintLength;
 
-#[cfg(feature = "futures_stream")]
+#[cfg(feature = "tokio-stream")]
 pub mod futures_stream;
 
 /// Error type for rkyv_codec
@@ -61,7 +61,7 @@ pub enum RkyvCodecError {
 	#[error("Premature End of File Error")]
 	EOFError,
 
-	#[cfg(feature = "futures_stream")]
+	#[cfg(feature = "tokio-stream")]
 	#[error("Deserialize Error")]
 	DeserializeError,
 }
@@ -162,8 +162,8 @@ mod tests {
 	use async_std::task::block_on;
 	use bytes::BytesMut;
 	use futures::{io::Cursor, AsyncRead, AsyncWrite, SinkExt, StreamExt, TryStreamExt};
-	use futures_codec::{CborCodec, Framed};
 	use rkyv::{to_bytes, AlignedVec, Archive, Archived, Deserialize, Infallible, Serialize};
+	use tokio_util::codec::Framed;
 
 	use crate::{
 		archive_sink, archive_sink_bytes, archive_stream, archive_stream_bytes,
@@ -172,16 +172,7 @@ mod tests {
 		RkyvWriter,
 	};
 
-	#[derive(
-		Archive,
-		Deserialize,
-		Serialize,
-		Debug,
-		PartialEq,
-		Clone,
-		serde::Serialize,
-		serde::Deserialize,
-	)]
+	#[derive(Archive, Deserialize, Serialize, Debug, PartialEq, Clone)]
 	// This will generate a PartialEq impl between our unarchived and archived types
 	// To use the safe API, you have to use the check_bytes option for the archive
 	#[archive(compare(PartialEq), check_bytes)]
@@ -280,28 +271,12 @@ mod tests {
 	async fn futures_ser_de() {
 		let codec = RkyvCodec::<Test, VarintLength>::default();
 		let mut buffer = vec![0u8; 256];
-		let mut framed = futures_codec::Framed::new(Cursor::new(&mut buffer), codec);
+		let mut framed = tokio_util::codec::Framed::new(Cursor::new(&mut buffer), codec);
 		framed.send(TEST.clone()).await.unwrap();
 
 		let (_, codec) = framed.release();
 
-		let mut framed = futures_codec::Framed::new(Cursor::new(&mut buffer), codec);
-		let received_value = framed.next().await.unwrap().unwrap();
-
-		assert_eq!(*TEST, received_value);
-	}
-	#[async_std::test]
-	async fn futures_cbor_ser_de() {
-		let codec = CborCodec::<Test, Test>::new();
-
-		let mut buffer = vec![0u8; 256];
-		let mut framed = Framed::new(Cursor::new(&mut buffer), codec);
-
-		framed.send(TEST.clone()).await.unwrap();
-
-		let (_, codec) = framed.release();
-
-		let mut framed = futures_codec::Framed::new(Cursor::new(&mut buffer), codec);
+		let mut framed = tokio_util::codec::Framed::new(Cursor::new(&mut buffer), codec);
 		let received_value = framed.next().await.unwrap().unwrap();
 
 		assert_eq!(*TEST, received_value);
@@ -397,7 +372,7 @@ mod tests {
 			block_on(async {
 				buffer.clear();
 				let codec = RkyvCodec::<Test, VarintLength>::default();
-				let mut framed = futures_codec::Framed::new(Cursor::new(&mut buffer), codec);
+				let mut framed = tokio_util::codec::Framed::new(Cursor::new(&mut buffer), codec);
 				for _ in 0..50 {
 					framed.send(TEST.clone()).await.unwrap();
 				}
@@ -412,7 +387,7 @@ mod tests {
 		block_on(gen_amount::<_, VarintLength>(&mut buffer, 50));
 
 		let codec = RkyvCodec::<Test, VarintLength>::default();
-		let mut framed = futures_codec::Framed::new(Cursor::new(&mut buffer), codec);
+		let mut framed = tokio_util::codec::Framed::new(Cursor::new(&mut buffer), codec);
 		b.iter(|| {
 			block_on(async {
 				framed.set_position(0);
@@ -433,31 +408,6 @@ mod tests {
 				framed.set_position(0);
 				for _ in 0..50 {
 					framed.send(TEST.clone()).await.unwrap();
-				}
-			})
-		});
-	}
-	#[bench]
-	fn bench_futures_cbor_stream_50(b: &mut Bencher) {
-		let codec = CborCodec::<Test, Test>::new();
-
-		let mut buffer = vec![0u8; 256];
-		let mut framed = Framed::new(Cursor::new(&mut buffer), codec);
-
-		block_on(async {
-			for _ in 0..50 {
-				framed.send(TEST.clone()).await.unwrap();
-			}
-		});
-
-		let (_, codec) = framed.release();
-		let mut framed = futures_codec::Framed::new(Cursor::new(&mut buffer), codec);
-
-		b.iter(|| {
-			block_on(async {
-				framed.set_position(0);
-				while let Some(value) = framed.next().await {
-					test::black_box(value.unwrap());
 				}
 			})
 		});

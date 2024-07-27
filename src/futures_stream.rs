@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 
-use bytes_old::Buf;
-use futures_codec::{BytesMut, Decoder, Encoder};
+use bytes::{Buf, BytesMut};
 use rkyv::{
 	ser::{
 		serializers::{
@@ -12,6 +11,7 @@ use rkyv::{
 	},
 	AlignedVec, Archive, Deserialize, Infallible, Serialize,
 };
+use tokio_util::codec::{Decoder, Encoder};
 
 use crate::{length_codec::LengthCodec, RkyvCodecError};
 
@@ -32,7 +32,7 @@ impl<Packet: Archive, L: LengthCodec> Default for RkyvCodec<Packet, L> {
 	}
 }
 /// Encoder impl encodes object streams to bytes
-impl<Packet, L: LengthCodec> Encoder for RkyvCodec<Packet, L>
+impl<Packet, L: LengthCodec> Encoder<Packet> for RkyvCodec<Packet, L>
 where
 	Packet: Archive
 		+ for<'b> Serialize<
@@ -43,10 +43,9 @@ where
 			>,
 		>,
 {
-	type Item = Packet;
 	type Error = RkyvCodecError;
 
-	fn encode(&mut self, data: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+	fn encode(&mut self, data: Packet, buf: &mut BytesMut) -> Result<(), Self::Error> {
 		self.encode_buffer.clear();
 		let serializer = WriteSerializer::new(&mut self.encode_buffer);
 		let _rkyv_root = CompositeSerializer::new(
