@@ -41,7 +41,7 @@ pub mod length_codec;
 pub use length_codec::VarintLength;
 
 #[cfg(feature = "futures_stream")]
-mod futures_stream;
+pub mod futures_stream;
 
 /// Error type for rkyv_codec
 #[cfg(feature = "std")]
