@@ -1,3 +1,5 @@
+### This is an updated fork of [rkyv_codec](https://github.com/zyansheep/rkyv_codec) made to work with rubycave. It is lazily ported over to tokio_util and tokio_stream, so some tests and benchmarks were removed.
+
 # rkyv_codec
 <p>
     <a href="https://docs.rs/rkyv_codec">
